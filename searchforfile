@@ -1,6 +1,26 @@
 #!/bin/bash
 
-###   This program is used to  search for files/directories in and below current directory     ###
+#-----------------------------------------------------------------------#
+#   This program is used to  search for files/directories in and below  #
+#   current directory                                                   #
+#   License: license? ok. GPLv3                                         #
+#            search for the full statement somewhere in gnu.org         #
+#                               -ppurka                                 #
+#-----------------------------------------------------------------------#
+
+#---------------------------ChangeLog-----------------------------------#
+# 08/02/2008:   Removed -r option, since now the number of output is    #
+#               auto determined by the size of the terminal             #
+#               Much better output now,- the input remains static at the#
+#               bottom of the terminal. Could achieve this using tput   #
+#               New options: --from <date>, --to <date>, to be used in  #
+#               conjunction with --find                                 #
+# 08/01/2008:   Better output                                           #
+#               Better formatted script                                 #
+#               New options -d, -r                                      #
+# <08/01/2008:  Umpteen number of untracked changes                     #
+# ~2005:        First version of the script                             #
+#-----------------------------------------------------------------------#
 
 . `which my_bash_functions 2> /dev/null` || {
     echo -e " \x1b[1;31mError!\x1b[0m The script \x1b[1;32mmy_bash_functions\
@@ -9,152 +29,281 @@
     exit 1
 }
 
+
 help() { # {{{
+    local self=$( basename $0 )
     echo;
-    echo -e " $yellow $( basename ${0} ):$normal";
+    echo -e " $yellow $self:$normal"
     info "This program is used to interactively search for files/directories"
-    info "Usage:     $( basename ${0} ) [options]";
+    info "Usage:     $self [options]"
     info "Options:
-    -h | --help           This help text
-    -nc| --no-color       Do not use color in output
+    -h | --help         This help text
     -c | --case-sensitive Make search case sensitive
-    -s | --slocate        Search using slocate database from current directory
-    -f | --find           Search using the ${underline}find$normal command upto
-                          ${MAXDEPTH} directories deep (may be slow).\n"
+    -d | --depth <num>  Makes find search for upto <num> directories deep
+    -f | --find         Search using the ${underline}find$normal command upto \
+$cyan\$MAXDEPTH$normal 
+                        (default 6) directories deep (may be slow)
+                        $cyan\$MAXDEPTH$normal is defined in ${bold}line \
+$(sed -ne /^MAXDEPTH=/= $0)$normal of $self
+    -F | --from <date>  Search for files added/modified on/after this date
+                        This option should be used only in conjunction with -f
+    -nc| --no-color     Do not use color in output
+    -s | --slocate      Search using slocate database from current directory
+    -T | --to <date>    Search for files added/modified on/before this date
+                        This option should be used only in conjunction with -f
+    "
+    info "The date can be provided in either one of following formats:
+    <number of month>-<day>-<year>
+    <number of month>/<day>/<year>
+    <day> <month (eg January/Jan)> [<year>]
+    <month (eg January/Jan)> <day> [<year>]
+    <number> day[s]/week[s]/month[s]/year[s] ago
+    last/next hour/day/week/month/year/<weekday> (eg. Sun/Sunday)
+    <weekday> (eg. Sun/Sunday)/yesterday/today/tomorrow
+    ${bold}Eg:${normal} 7-28-2006, 07/28/2006, 28 Jul, 8 July 2006, last week, 2 years ago
+    "
     info "Examples:
-    searchforfile:  Search for all files and directories ${underline}in$normal current directory
+    searchforfile:  Search for all files and directories ${underline}in$normal \
+current directory
     searchforfile -s -c:  Case sensitive search for all files and directories 
-                    ${underline}from$normal current directory, using locate";
-    echo;
+                    ${underline}from$normal current directory, using locate
+    "
+    info "Note: Some kind of strange (sometimes pleasant) behavior may
+    happen if you use regex. For instance using '.' instead of ' ' may
+    allow you to search for filenames with spaces
+    "
 }
 # }}}
 
-CASE="-i";
-INPUT=;
-LIMIT=;
-FIND=;
-TMPFILE=`mktemp` || TMPFILE="/tmp/${UID}locate.dump"
-MAXDEPTH=6;
+DATE[1]=0; DATE[2]=20380118; # DATE[2] is the max possible *NIX time
+date_out=
+CASE="I"
+INPUT=
+LIMIT=
+FIND=
+MAXDEPTH=6
+# Typically a terminal has these many rows. If there are more results than
+# these, those will anyway not come up in plain view, so no reason to print
+# out those
+set_rows() { 
+    total_rows=$(tput lines)
+    # There is one blank at top of screen. and 4 used spaces at bottom
+    rows=$(($total_rows - 5))
+    rows_plus_one=$(($rows + 1))
+    [[ $rows -le 0 ]] && info "Hey dood! I need more space here" && sleep 2
+}
+
+# Create a temp file for find/slocate
+set_tmpfile() {
+    TMPFILE=`mktemp /tmp/searchforfile.XXXX` || \
+    TMPFILE="/tmp/$UID.searchforfile"
+}
+
 
 clean_tmpfile() {
     # Cleanup temporary file
-    [ ! -z "${LIMIT}" ] && rm -f ${TMPFILE};
-    exit 0;
+    [[ $TMPFILE ]] && rm -f $TMPFILE
+    exit 0
 }
 
+# Return DATE in format: YYYYMMDD {{{
+getdate() {
+    DATE[$1]="$(date --date="$2 $3 $4" +%Y%m%d 2>/dev/null)";
+    return;  # return will return the exit status of previous line
+}
+# }}}
 
-
-#[[ -z "$1" && $- != *i* ]] && xterm -hold -e $0 -h && exit
-for i in "$@"
-do
-    case "$i" in
-    "")
-        echo;
-        ;;
-    -h | --help)
-        help;
-        exit 0;
-        ;;
-    -nc | --no-color)
-        unset yellow red green underline bold;
-        ;;
-    -c | --case-sensitive)
-        CASE="";
-        ;;
-    -s | --slocate)
-        if [ ! -z "${LIMIT}" ]; then
-            Err "Can not give -f  and -s switch together";
-            help;
-            exit 1;
-        fi  
-        WORKDIR="$(pwd)/"
-        LIMIT="of at least 3 characters";
-        ;;
-    -f | --find)
-        if [ ! -z "${LIMIT}" ]; then
-            Err "Can not give -f  and -s switch together";
-            help;
-            exit 1;
-        fi  
-        LIMIT="of at least 3 characters";
-        FIND=1;
-        ;;
-#    -d | --disk)
-#        OUTPUT="locate ${INPUT_X}";
-#        LIMIT="of at least 3 characters";
-#        ;;
-    *)
-        Err "Unknown Option provided";
-        help;
-        exit 1;
-        ;;
+ismonth() { # ismonth isweek and isfuzzy {{{
+    case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
+    jan*|feb*|mar*|apr*|may*|jun*|jul*|aug*|sep*|oct*|nov*|dec*) return 0 ;;
     esac
+    return 1;
+}
+
+isweek() {
+    case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
+        sun*|mon*|tue*|wed*|thu*|fri*|sat*) return 0;;
+    esac
+    return 1
+}
+
+ismono() {
+    case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
+        yesterday|today|tomorrow) return 0;;
+    esac
+    return 1
+}
+
+isfuzzy() {
+    case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
+        last|next) case "$(echo $2 | tr '[:upper:]' '[:lower:]')" in
+            day|week|month|year)    return 0;;
+            *)  isweek $2 && return 0;;
+        esac ;;
+    esac
+    return 1
+}
+# }}}
+
+read_date() { #{{{
+    if [[ $2 = *-* ]]; then      # month-day[-year]
+        getdate $1 "$2" || die "$2: Invalid date entry\n"
+        NUM_SHIFTS=0
+    elif [[ $2 = */* ]]; then    # month/day[/year]
+        getdate $1 "$2" || die "$2: Invalid date entry\n"
+        NUM_SHIFTS=0
+    elif [[ $2 -gt 0 && $4 = "ago" ]]; then
+        # <number> hour/day/week/month/year[s] ago
+        getdate $1 $2 $3 $4 || \
+            die "$2 $3 $4: Invalid date entry\n"
+        NUM_SHIFTS=2
+    elif [[ $2 -gt 0 && $2 -le 31 ]]; then
+        # <num> <month> [<year>]
+        if [[ $4 -gt 0 ]]; then
+            getdate $1 $2 $3 $4 || \
+                die "$2 $3 $4: Invalid date entry\n"
+            NUM_SHIFTS=2
+        else
+            getdate $1 $2 $3 || \
+                die "$2 $3: Invalid date entry\n"
+            NUM_SHIFTS=1
+        fi
+    elif ismonth $2 && [[ $3 -gt 0 ]]; then
+        # <month> <day> [<year>]
+        if [[ $4 -gt 0 ]]; then
+            getdate $1 $2 $3 $4 || \
+                die "$2 $3 $4: Invalid date entry\n"
+            NUM_SHIFTS=2
+        else
+            getdate $1 $2 $3 || \
+                die "$2 $3: Invalid date entry\n"
+            NUM_SHIFTS=1
+        fi
+    elif isfuzzy $2 $3; then
+        # last <weekday>, next <weekday>
+        # last|next day|week|month|year
+        getdate $1 $2 $3 || die "$2 $3: Invalid date entry\n"
+        NUM_SHIFTS=1
+    elif isweek $2 || ismono $2; then
+        # Fuzzy dates: <weekday>, yesterday, today, tomorrow
+        getdate $1 $2 || die "$2: Invalid date entry\n"
+        NUM_SHIFTS=0
+    else
+        help; die "$2: Invalid date entry\n"; 
+    fi
+    echo;
+}
+# }}}
+
+
+
+if [[ $DISPLAY && -z "$@" ]] && ! tty -s; then 
+    xterm -hold -e $0 -h; clean_tmpfile
+fi
+
+until [[ -z "$1" ]]; do
+    case "$1" in
+    -c | --case-sensitive) CASE="" ;;
+    -d | --depth)       shift
+        [[ $1 -ge 0 ]] || die "$1: expected number, got string"
+        MAXDEPTH=$1 ;;
+    -f | --find)        [[ "$TMPFILE" ]] && \
+        die "Can not give -f  and -s switch together"
+        set_tmpfile;
+        FIND=1 ;;
+    -F | --from)        shift; read_date 1 "$1" "$2" "$3"
+        for ANSWER in $(seq $NUM_SHIFTS -1 1); do shift; done
+        unset NUM_SHIFTS
+        date_out="  $yellow*$normal Showing files added/modified";;
+    -h | --help)        help; clean_tmpfile;;
+    -nc | --no-color)   unset ${COLORS[@]} ;;
+    -s | --slocate)     [[ "$TMPFILE" ]] && \
+        die "Can not give -f  and -s switch together"
+        WORKDIR="$(pwd)/"
+        set_tmpfile;;
+    -T | --to)          shift; read_date 2 "$1" "$2" "$3"
+        for ANSWER in $(seq $NUM_SHIFTS -1 1); do shift; done
+        unset NUM_SHIFTS
+        date_out="  $yellow*$normal Showing files added/modified";;
+    *)  die "$1: Invalid Option provided" ;;
+    esac
+    shift
 done
 
-trap clean_tmpfile 0 1 2 5 15
+trap "clean_tmpfile" 1 2 5 15
+trap "set_rows" WINCH
+
+# Before doing anything determine whether DATE is being used with or
+# without find. DATE should be used *only* with find
+[[ ( ${DATE[1]} -gt 0 || ${DATE[2]} -lt 20380118 ) && -z "$FIND" ]] && \
+    die "--from or --to should be used only with --find"
+
+# Determine the height of terminal
+set_rows
 
 # Write once to temporary file, so that locate is run only once
 # We will only grep the results from this file later on
-if [ ! -z "${LIMIT}" ]; then
-    if [ -z "${FIND}" ]; then
-        locate -q -l 0 "${WORKDIR}" | sed "s:${WORKDIR}::" > ${TMPFILE} &
+if [[ "$TMPFILE" ]]; then
+    if [[ -z "$FIND" ]]; then
+        locate -q -l 0 "$WORKDIR" | sed "s:$WORKDIR::" > $TMPFILE &
+    elif [[ ${DATE[1]} -gt 0 && ${DATE[2]} -lt 20380118 ]]; then
+        find . -mount -maxdepth $MAXDEPTH -newermt ${DATE[1]} \
+            ! -newermt ${DATE[2]} > $TMPFILE &
+        date_out="$date_out after $blue$(date -d ${DATE[1]} '+%d %b, %Y')$normal\
+ and\
+ before $blue$(date -d ${DATE[2]} '+%d %b, %Y')$normal"
+    elif [[ ${DATE[1]} -gt 0 ]]; then
+        find . -mount -maxdepth $MAXDEPTH -newermt ${DATE[1]} \
+            > $TMPFILE &
+        date_out="$date_out after $blue$(date -d ${DATE[1]} '+%d %b, %Y')$normal"
+    elif [[ ${DATE[2]} -lt 20380118 ]]; then
+        find . -mount -maxdepth $MAXDEPTH ! -newermt ${DATE[2]} \
+            > $TMPFILE &
+        date_out="$date_out before $blue$(date -d ${DATE[2]} '+%d %b, %Y')$normal"
     else
-        find ./ -mount -maxdepth ${MAXDEPTH} > ${TMPFILE} &
+        find . -mount -maxdepth $MAXDEPTH > $TMPFILE &
     fi
 fi
-     
-clear;
 
-echo -e "\n\n\n$green^$normal---------------${green}Search Results$normal----------------------$green^\n\n\n$normal"
+clear
 
-#while test "1" -eq "1"
-while true
-do
+while true; do
     
-    echo -ne "  $yellow *$normal   Enter search term ${LIMIT}( blanks not accepted ): $INPUT_X";
+    tput cup $(($rows_plus_one)) 0
+    echo
+    centered_output dash " ^ Search Results (first $rows results) ^ "
+    echo -e "$date_out"
+    echo -ne "  $yellow*$normal Enter search term (Use '\ ' for ' '): $INPUT_X"
     read -n 1 INPUT
     
     # Exit on pressing enter
-    if [ "$INPUT" = "" ]; then
-        break;
-    fi
+    [[ "$INPUT" ]] || break
     
-    clear;
+    clear
+    # One blank space at top of screen is required so that the topmost
+    # result does not scroll off the visible area when the script is exited
+    echo
 
-    # An ASCII character within the range 32-126 will append, otherwise it will send backspace
-    if [ -z `echo -e "$INPUT" | grep -e "[[:print:]]"` ]; then
-        INPUT_X=`echo ${INPUT_X} | head -c -2`
-    else
-        INPUT_X="${INPUT_X}${INPUT}"
+    # An ASCII character within the range 32-126 will append, otherwise it
+    # will send backspace. space tends to quit, no idea why
+    if echo -e "$INPUT" | egrep -q -e "[[:print:]]"; then
+        INPUT_X="$INPUT_X$INPUT"
+    elif [[ ${#INPUT_X} -gt 0 ]]; then
+        INPUT_X="${INPUT_X:0:$[${#INPUT_X}-1]}"
     fi
 
-    
-    if [ ! -z "${INPUT_X}" ]; then    
-        if [ -z "${LIMIT}" ]; then
+    if [[ "$INPUT_X" ]]; then
+        if [[ -z "$TMPFILE" ]]; then
             # Normal case, no problems here
-            ls --color -1 | grep ${CASE} ${INPUT_X};
-        
-        elif [ "$( echo ${INPUT_X} | wc -c )" -gt 3 ]; then
+            ls -1 | sed -n -e "s:\($INPUT_X\):$cyan\1$normal:${CASE}gp" | \
+                head -n $rows
+        else
             # Have to limit the output,- otherwise it takes 100% cpu
-            if [ -z "${FIND}" ]; then
-                grep ${CASE} ${INPUT_X} "${TMPFILE}" | tail -n 40 | sed "s:.*:${WORKDIR}&:";
-            else
-                grep ${CASE} ${INPUT_X} "${TMPFILE}" | tail -n 40;
-            fi
-        
+            sed -n -e "s:\($INPUT_X\):$cyan\1$normal:${CASE}pg" $TMPFILE | \
+                head -n $rows
         fi
     fi
     
-        echo -e "\n\n\n$green^$normal-------------------${green}Search Results$normal----------------------$green^\n\n\n$normal"
-    
 done
 
-clean_tmpfile;
-
-
-### Old scripts ### {{{
-#    if [[ ! -z "${LIMIT}" && -z "${FIND}" ]]; then
-#        echo -e "\n\n\n$green^$normal-------------------$greenSearch Results$normal----------------------$green^\n\n\n$normalNote! You are using slocate database. You might get incorrect results if database is not up-to-date"
-#    else
-#    fi
-# }}}
+clean_tmpfile
