@@ -9,6 +9,8 @@
 #-----------------------------------------------------------------------#
 
 #---------------------------ChangeLog-----------------------------------#
+# 12/14/2008:   Added --customized-prompt option: used only from scripts#
+#               included possibilities of dates like YYYYMMDD           #
 # 08/02/2008:   Removed -r option, since now the number of output is    #
 #               auto determined by the size of the terminal             #
 #               Much better output now,- the input remains static at the#
@@ -32,7 +34,7 @@
 
 help() { # {{{
     local self=$( basename $0 )
-    echo;
+    echo
     echo -e " $yellow $self:$normal"
     info "This program is used to interactively search for files/directories"
     info "Usage:     $self [options]"
@@ -82,6 +84,7 @@ INPUT=
 LIMIT=
 FIND=
 MAXDEPTH=6
+output_prompt="Enter search term"
 # Typically a terminal has these many rows. If there are more results than
 # these, those will anyway not come up in plain view, so no reason to print
 # out those
@@ -108,7 +111,7 @@ clean_tmpfile() {
 
 # Return DATE in format: YYYYMMDD {{{
 getdate() {
-    DATE[$1]="$(date --date="$2 $3 $4" +%Y%m%d 2>/dev/null)";
+    DATE[$1]="$(date --date="$2 $3 $4" +%Y%m%d 2>/dev/null)"
     return;  # return will return the exit status of previous line
 }
 # }}}
@@ -117,7 +120,7 @@ ismonth() { # ismonth isweek and isfuzzy {{{
     case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
     jan*|feb*|mar*|apr*|may*|jun*|jul*|aug*|sep*|oct*|nov*|dec*) return 0 ;;
     esac
-    return 1;
+    return 1
 }
 
 isweek() {
@@ -131,6 +134,7 @@ ismono() {
     case "$(echo $1 | tr '[:upper:]' '[:lower:]')" in
         yesterday|today|tomorrow) return 0;;
     esac
+    echo "$1" | egrep -q -x '[0-9]+' && return 0
     return 1
 }
 
@@ -191,7 +195,7 @@ read_date() { #{{{
     else
         help; die "$2: Invalid date entry\n"; 
     fi
-    echo;
+    echo
 }
 # }}}
 
@@ -203,13 +207,14 @@ fi
 
 until [[ -z "$1" ]]; do
     case "$1" in
-    -c | --case-sensitive) CASE="" ;;
+    -c | --case-sensitive)  CASE="" ;;
+    --customized-prompt)    output_prompt="$2"; shift;;
     -d | --depth)       shift
         [[ $1 -ge 0 ]] || die "$1: expected number, got string"
         MAXDEPTH=$1 ;;
     -f | --find)        [[ "$TMPFILE" ]] && \
         die "Can not give -f  and -s switch together"
-        set_tmpfile;
+        set_tmpfile
         FIND=1 ;;
     -F | --from)        shift; read_date 1 "$1" "$2" "$3"
         for ANSWER in $(seq $NUM_SHIFTS -1 1); do shift; done
@@ -273,7 +278,7 @@ while true; do
     echo
     centered_output dash " ^ Search Results (first $rows results) ^ "
     echo -e "$date_out"
-    echo -ne "  $yellow*$normal Enter search term (Use '\ ' for ' '): $INPUT_X"
+    echo -ne "  $yellow*$normal $output_prompt (Use '\ ' for ' '): $INPUT_X"
     read -n 1 INPUT
     
     # Exit on pressing enter
