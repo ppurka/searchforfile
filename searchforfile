@@ -9,6 +9,7 @@
 #-----------------------------------------------------------------------#
 
 #---------------------------ChangeLog-----------------------------------#
+# 05/11/2009:   Some more bashisms in using for loops. Get rid of seq   #
 # 12/14/2008:   Added --customized-prompt option: used only from scripts#
 #               included possibilities of dates like YYYYMMDD           #
 # 08/02/2008:   Removed -r option, since now the number of output is    #
@@ -217,7 +218,7 @@ until [[ -z "$1" ]]; do
         set_tmpfile
         FIND=1 ;;
     -F | --from)        shift; read_date 1 "$1" "$2" "$3"
-        for ANSWER in $(seq $NUM_SHIFTS -1 1); do shift; done
+        for (( i=1; i<=$NUM_SHIFTS; i++ )); do shift; done
         unset NUM_SHIFTS
         date_out="  $yellow*$normal Showing files added/modified";;
     -h | --help)        help; clean_tmpfile;;
@@ -227,7 +228,7 @@ until [[ -z "$1" ]]; do
         WORKDIR="$(pwd)/"
         set_tmpfile;;
     -T | --to)          shift; read_date 2 "$1" "$2" "$3"
-        for ANSWER in $(seq $NUM_SHIFTS -1 1); do shift; done
+        for (( i=1; i<=$NUM_SHIFTS; i++ )); do shift; done
         unset NUM_SHIFTS
         date_out="  $yellow*$normal Showing files added/modified";;
     *)  die "$1: Invalid Option provided" ;;
@@ -276,7 +277,8 @@ while true; do
     
     tput cup $(($rows_plus_one)) 0
     echo
-    centered_output dash " ^ Search Results (first $rows results) ^ "
+    centered_output dash \
+        " ^ Search Results (first $blue$rows$normal results) ^ "
     echo -e "$date_out"
     echo -ne "  $yellow*$normal $output_prompt (Use '\ ' for ' '): $INPUT_X"
     read -n 1 INPUT
