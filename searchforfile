@@ -9,6 +9,7 @@
 #-----------------------------------------------------------------------#
 
 #---------------------------ChangeLog-----------------------------------#
+# 07/24/2009:   Convert some ` ` -> "$( )"                              #
 # 05/11/2009:   Some more bashisms in using for loops. Get rid of seq   #
 # 12/14/2008:   Added --customized-prompt option: used only from scripts#
 #               included possibilities of dates like YYYYMMDD           #
@@ -99,7 +100,7 @@ set_rows() {
 
 # Create a temp file for find/slocate
 set_tmpfile() {
-    TMPFILE=`mktemp /tmp/searchforfile.XXXX` || \
+    TMPFILE="$(mktemp /tmp/searchforfile.XXXX)" || \
     TMPFILE="/tmp/$UID.searchforfile"
 }
 
