@@ -9,6 +9,10 @@
 #-----------------------------------------------------------------------#
 
 #---------------------------ChangeLog-----------------------------------#
+# 10/10/2010:   Edit sed separators to be @ instead of :                #
+#               Fix read_date since date doesn't accept *-* now.        #
+#               Add a new variable $SED_ARG to take care of "-D",- this #
+#               functionality is still incomplete                       #
 # 07/24/2009:   Convert some ` ` -> "$( )"                              #
 # 05/11/2009:   Some more bashisms in using for loops. Get rid of seq   #
 # 12/14/2008:   Added --customized-prompt option: used only from scripts#
@@ -44,6 +48,10 @@ help() { # {{{
     -h | --help         This help text
     -c | --case-sensitive Make search case sensitive
     -d | --depth <num>  Makes find search for upto <num> directories deep
+    -D | --directory    *Try* to search with only directory name, and yet
+                        show all the files within the directory
+                        This is pretty much incomplete. A better sed
+                        expression is required to make it really work
     -f | --find         Search using the ${underline}find$normal command upto \
 $cyan\$MAXDEPTH$normal 
                         (default 6) directories deep (may be slow)
@@ -87,6 +95,8 @@ LIMIT=
 FIND=
 MAXDEPTH=6
 output_prompt="Enter search term"
+SED_ARG="gp"
+
 # Typically a terminal has these many rows. If there are more results than
 # these, those will anyway not come up in plain view, so no reason to print
 # out those
@@ -152,10 +162,11 @@ isfuzzy() {
 # }}}
 
 read_date() { #{{{
-    if [[ $2 = *-* ]]; then      # month-day[-year]
-        getdate $1 "$2" || die "$2: Invalid date entry\n"
-        NUM_SHIFTS=0
-    elif [[ $2 = */* ]]; then    # month/day[/year]
+    #if [[ $2 = *-* ]]; then      # month-day[-year]
+    #    getdate $1 "$2" || die "$2: Invalid date entry\n"
+    #    NUM_SHIFTS=0
+    #elif [[ $2 = */* ]]; then    # month/day[/year]
+    if [[ $2 = */* ]]; then    # month/day[/year]
         getdate $1 "$2" || die "$2: Invalid date entry\n"
         NUM_SHIFTS=0
     elif [[ $2 -gt 0 && $4 = "ago" ]]; then
@@ -214,6 +225,7 @@ until [[ -z "$1" ]]; do
     -d | --depth)       shift
         [[ $1 -ge 0 ]] || die "$1: expected number, got string"
         MAXDEPTH=$1 ;;
+    -D | --directory)   SED_ARG="${SED_ARG/g/}" ;;
     -f | --find)        [[ "$TMPFILE" ]] && \
         die "Can not give -f  and -s switch together"
         set_tmpfile
@@ -303,12 +315,13 @@ while true; do
     if [[ "$INPUT_X" ]]; then
         if [[ -z "$TMPFILE" ]]; then
             # Normal case, no problems here
-            ls -1 | sed -n -e "s:\($INPUT_X\):$cyan\1$normal:${CASE}gp" | \
+            ls -1 | sed -n -e \
+                "s@\($INPUT_X\)@$cyan\1$normal@${CASE}${SED_ARG}" | \
                 head -n $rows
         else
             # Have to limit the output,- otherwise it takes 100% cpu
-            sed -n -e "s:\($INPUT_X\):$cyan\1$normal:${CASE}pg" $TMPFILE | \
-                head -n $rows
+            sed -n -e "s@\($INPUT_X\)@$cyan\1$normal@${CASE}${SED_ARG}" \
+                $TMPFILE | head -n $rows
         fi
     fi
     
