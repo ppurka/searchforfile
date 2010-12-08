@@ -1,34 +1,38 @@
 #!/bin/bash
 
-#-----------------------------------------------------------------------#
-#   This program is used to  search for files/directories in and below  #
-#   current directory                                                   #
-#   License: license? ok. GPLv3                                         #
-#            search for the full statement somewhere in gnu.org         #
-#                               -ppurka                                 #
-#-----------------------------------------------------------------------#
+    #--------------------------------------------------------------------#
+    #   This program is used to  search for files/directories in & below #
+    #   current directory                                                #
+    #   License: license? ok. GPLv3                                      #
+    #            search for the full statement somewhere in gnu.org      #
+    #                               -ppurka                              #
+    #--------------------------------------------------------------------#
 
-#---------------------------ChangeLog-----------------------------------#
-# 10/10/2010:   Edit sed separators to be @ instead of :                #
-#               Fix read_date since date doesn't accept *-* now.        #
-#               Add a new variable $SED_ARG to take care of "-D",- this #
-#               functionality is still incomplete                       #
-# 07/24/2009:   Convert some ` ` -> "$( )"                              #
-# 05/11/2009:   Some more bashisms in using for loops. Get rid of seq   #
-# 12/14/2008:   Added --customized-prompt option: used only from scripts#
-#               included possibilities of dates like YYYYMMDD           #
-# 08/02/2008:   Removed -r option, since now the number of output is    #
-#               auto determined by the size of the terminal             #
-#               Much better output now,- the input remains static at the#
-#               bottom of the terminal. Could achieve this using tput   #
-#               New options: --from <date>, --to <date>, to be used in  #
-#               conjunction with --find                                 #
-# 08/01/2008:   Better output                                           #
-#               Better formatted script                                 #
-#               New options -d, -r                                      #
-# <08/01/2008:  Umpteen number of untracked changes                     #
-# ~2005:        First version of the script                             #
-#-----------------------------------------------------------------------#
+    #---------------------------ChangeLog--------------------------------#
+    # 12/09/2010:   Remove SED_ARG and instead use DIR variable          #
+    #               Implement support for only authors or authors.*title #
+    #               to be used from codingtheory script                  #
+    # 10/10/2010:   Edit sed separators to be @ instead of :             #
+    #               Fix read_date since date doesn't accept *-* now.     #
+    #               Add a new variable $SED_ARG to take care of "-D"-    #
+    #               this functionality is still incomplete               #
+    # 07/24/2009:   Convert some ` ` -> "$( )"                           #
+    # 05/11/2009:   Some more bashisms in using for loops. Get rid of seq#
+    # 12/14/2008:   Added --customized-prompt option: use only from other#
+    #               scripts                                              #
+    #               Included possibilities of dates like YYYYMMDD        #
+    # 08/02/2008:   Removed -r option, since now the number of output is #
+    #               auto determined by the size of the terminal          #
+    #               Much better output now,- the input remains static at #
+    #               bottom of the terminal. Could achieve this using tput#
+    #               New options: --from <date>, --to <date>, to be used  #
+    #               in conjunction with --find                           #
+    # 08/01/2008:   Better output                                        #
+    #               Better formatted script                              #
+    #               New options -d, -r                                   #
+    # <08/01/2008:  Umpteen number of untracked changes                  #
+    # ~2005:        First version of the script                          #
+    #--------------------------------------------------------------------#
 
 . `which my_bash_functions 2> /dev/null` || {
     echo -e " \x1b[1;31mError!\x1b[0m The script \x1b[1;32mmy_bash_functions\
@@ -47,11 +51,13 @@ help() { # {{{
     info "Options:
     -h | --help         This help text
     -c | --case-sensitive Make search case sensitive
+    --customized-prompt <prompt> Provide a customized input prompt
+                        This was introduced for use only from other scripts,
+                        such as ${green}codingtheory$normal
+    -D | --directory    Search with only directory name
+                        If the search term contains either . or *, then
+                        a normal search is performed
     -d | --depth <num>  Makes find search for upto <num> directories deep
-    -D | --directory    *Try* to search with only directory name, and yet
-                        show all the files within the directory
-                        This is pretty much incomplete. A better sed
-                        expression is required to make it really work
     -f | --find         Search using the ${underline}find$normal command upto \
 $cyan\$MAXDEPTH$normal 
                         (default 6) directories deep (may be slow)
@@ -87,15 +93,15 @@ current directory
 }
 # }}}
 
-DATE[1]=0; DATE[2]=20380118; # DATE[2] is the max possible *NIX time
+DATE[1]=0; DATE[2]=20380118;    # DATE[2] is the max possible *NIX time
 date_out=
-CASE="I"
+CASE="I"                        # whether to do case-sensitive search
+DIR=                            # whether to give preference to directory
 INPUT=
 LIMIT=
 FIND=
 MAXDEPTH=6
 output_prompt="Enter search term"
-SED_ARG="gp"
 
 # Typically a terminal has these many rows. If there are more results than
 # these, those will anyway not come up in plain view, so no reason to print
@@ -222,10 +228,10 @@ until [[ -z "$1" ]]; do
     case "$1" in
     -c | --case-sensitive)  CASE="" ;;
     --customized-prompt)    output_prompt="$2"; shift;;
-    -d | --depth)       shift
+    -D | --directory)       DIR=1 ;;
+    -d | --depth)           shift
         [[ $1 -ge 0 ]] || die "$1: expected number, got string"
         MAXDEPTH=$1 ;;
-    -D | --directory)   SED_ARG="${SED_ARG/g/}" ;;
     -f | --find)        [[ "$TMPFILE" ]] && \
         die "Can not give -f  and -s switch together"
         set_tmpfile
@@ -313,18 +319,45 @@ while true; do
     fi
 
     if [[ "$INPUT_X" ]]; then
+        if [[ "$DIR" ]]; then
+            if [[ -z "$TMPFILE" ]]; then
+                if [[ "${INPUT_X/\./}" != "$INPUT_X" ]] || \
+                    [[ "${INPUT_X/\*/}" != "$INPUT_X" ]]; then
+                    # There is either sth*sth or sth.sth or sth.*sth
+                    ls -1 | sed -n -e \
+                        "s@\($INPUT_X\)@$cyan\1$normal@${CASE}p" | \
+                        head -n $rows
+                else
+                    ls -1 | sed -n -e \
+                        "s@\($INPUT_X\)\([^/]*\)/@$cyan\1$normal\2/@${CASE}p" \
+                        | head -n $rows
+                fi
+            else
+                if [[ "${INPUT_X/\./}" != "$INPUT_X" || \
+                    "${INPUT_X/\*/}" != "$INPUT_X" ]]; then
+                    # There is either sth*sth or sth.sth or sth.*sth
+                    sed -n -e \
+                        "s@\($INPUT_X\)@$cyan\1$normal@${CASE}p" $TMPFILE | \
+                        head -n $rows
+                else
+                    sed -n -e \
+                        "s@\($INPUT_X\)\([^/]*\)/@$cyan\1$normal\2/@${CASE}p" \
+                        $TMPFILE | head -n $rows
+                fi
+            fi
+      else
         if [[ -z "$TMPFILE" ]]; then
             # Normal case, no problems here
             ls -1 | sed -n -e \
-                "s@\($INPUT_X\)@$cyan\1$normal@${CASE}${SED_ARG}" | \
-                head -n $rows
+                "s@\($INPUT_X\)@$cyan\1$normal@${CASE}gp" | head -n $rows
         else
             # Have to limit the output,- otherwise it takes 100% cpu
-            sed -n -e "s@\($INPUT_X\)@$cyan\1$normal@${CASE}${SED_ARG}" \
-                $TMPFILE | head -n $rows
+            sed -n -e "s@\($INPUT_X\)@$cyan\1$normal@${CASE}gp" $TMPFILE \
+                | head -n $rows
         fi
+      fi
     fi
-    
+
 done
 
 clean_tmpfile
