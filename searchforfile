@@ -9,6 +9,7 @@
     #--------------------------------------------------------------------#
 
     #---------------------------ChangeLog--------------------------------#
+    # 06/18/2011:   Fix xterm command. Use exec.                         #
     # 12/09/2010:   Remove SED_ARG and instead use DIR variable          #
     #               Implement support for only authors or authors.*title #
     #               to be used from codingtheory script                  #
@@ -221,7 +222,7 @@ read_date() { #{{{
 
 
 if [[ $DISPLAY && -z "$@" ]] && ! tty -s; then 
-    xterm -hold -e $0 -h; clean_tmpfile
+    exec xterm -hold -e "$(dirname "$0")/$(basename "$0")" -h
 fi
 
 until [[ -z "$1" ]]; do
