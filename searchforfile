@@ -50,25 +50,25 @@ help() { # {{{
     info "This program is used to interactively search for files/directories"
     info "Usage:     $self [options]"
     info "Options:
-    -h | --help         This help text
-    -c | --case-sensitive Make search case sensitive
+    -h , --help         This help text
+    -c , --case-sensitive Make search case sensitive
     --customized-prompt <prompt> Provide a customized input prompt
                         This was introduced for use only from other scripts,
                         such as ${green}codingtheory$normal
-    -D | --directory    Search with only directory name
+    -D , --directory    Search with only directory name
                         If the search term contains either . or *, then
                         a normal search is performed
-    -d | --depth <num>  Makes find search for upto <num> directories deep
-    -f | --find         Search using the ${underline}find$normal command upto \
+    -d , --depth <num>  Makes find search for upto <num> directories deep
+    -f , --find         Search using the ${underline}find$normal command upto \
 $cyan\$MAXDEPTH$normal 
                         (default 6) directories deep (may be slow)
                         $cyan\$MAXDEPTH$normal is defined in ${bold}line \
 $(sed -ne /^MAXDEPTH=/= $0)$normal of $self
-    -F | --from <date>  Search for files added/modified on/after this date
+    -F , --from <date>  Search for files added/modified on/after this date
                         This option should be used only in conjunction with -f
-    -nc| --no-color     Do not use color in output
-    -s | --slocate      Search using slocate database from current directory
-    -T | --to <date>    Search for files added/modified on/before this date
+    -nc, --no-color     Do not use color in output
+    -s , --slocate      Search using slocate database from current directory
+    -T , --to <date>    Search for files added/modified on/before this date
                         This option should be used only in conjunction with -f
     "
     info "The date can be provided in either one of following formats:
@@ -251,6 +251,10 @@ until [[ -z "$1" ]]; do
         for (( i=1; i<=$NUM_SHIFTS; i++ )); do shift; done
         unset NUM_SHIFTS
         date_out="  $yellow*$normal Showing files added/modified";;
+	-*=*)	_var_="$1"
+		shift
+		set -- for_shift_below "${_var_%=*}" "${_var_#*=}" "$@"
+		unset _var_ ;;
     *)  die "$1: Invalid Option provided" ;;
     esac
     shift
