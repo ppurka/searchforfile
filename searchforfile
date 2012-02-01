@@ -9,6 +9,7 @@
     #--------------------------------------------------------------------#
 
     #---------------------------ChangeLog--------------------------------#
+    # 02/02/2012:   Looks like locate -l0 doesn't work any more. Remove. #
     # 06/18/2011:   Fix xterm command. Use exec.                         #
     # 12/09/2010:   Remove SED_ARG and instead use DIR variable          #
     #               Implement support for only authors or authors.*title #
@@ -275,7 +276,7 @@ set_rows
 # We will only grep the results from this file later on
 if [[ "$TMPFILE" ]]; then
     if [[ -z "$FIND" ]]; then
-        locate -q -l 0 "$WORKDIR" | sed "s:$WORKDIR::" > $TMPFILE &
+        locate -q "$WORKDIR" | sed "s:$WORKDIR::" > $TMPFILE &
     elif [[ ${DATE[1]} -gt 0 && ${DATE[2]} -lt 20380118 ]]; then
         find . -mount -maxdepth $MAXDEPTH -newermt ${DATE[1]} \
             ! -newermt ${DATE[2]} > $TMPFILE &
