@@ -1,7 +1,11 @@
 # searchforfile
 Search for files using locate or find
 
-The licence for this file is GPL-3 for all versions.
+
+## Copyright Notice
+Copyright (C) 2008 - 2015. P. Purkayastha <ppurka _at_ gmail _dot_ com>
+
+The licence for this file is GPL-3 for all versions. 
 
 ## Functionality
 
