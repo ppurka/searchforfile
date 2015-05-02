@@ -1,0 +1,160 @@
+#!/bin/bash
+
+###   This program is used to  search for files/directories in and below current directory     ###
+
+. `which my_bash_functions 2> /dev/null` || {
+    echo -e " \x1b[1;31mError!\x1b[0m The script \x1b[1;32mmy_bash_functions\
+\x1b[0m was not found in your \$PATH
+        Please ensure that the script is available and executable"
+    exit 1
+}
+
+help() { # {{{
+    echo;
+    echo -e " $yellow $( basename ${0} ):$normal";
+    info "This program is used to interactively search for files/directories"
+    info "Usage:     $( basename ${0} ) [options]";
+    info "Options:
+    -h | --help           This help text
+    -nc| --no-color       Do not use color in output
+    -c | --case-sensitive Make search case sensitive
+    -s | --slocate        Search using slocate database from current directory
+    -f | --find           Search using the ${underline}find$normal command upto
+                          ${MAXDEPTH} directories deep (may be slow).\n"
+    info "Examples:
+    searchforfile:  Search for all files and directories ${underline}in$normal current directory
+    searchforfile -s -c:  Case sensitive search for all files and directories 
+                    ${underline}from$normal current directory, using locate";
+    echo;
+}
+# }}}
+
+CASE="-i";
+INPUT=;
+LIMIT=;
+FIND=;
+TMPFILE=`mktemp` || TMPFILE="/tmp/${UID}locate.dump"
+MAXDEPTH=6;
+
+clean_tmpfile() {
+    # Cleanup temporary file
+    [ ! -z "${LIMIT}" ] && rm -f ${TMPFILE};
+    exit 0;
+}
+
+
+
+#[[ -z "$1" && $- != *i* ]] && xterm -hold -e $0 -h && exit
+for i in "$@"
+do
+    case "$i" in
+    "")
+        echo;
+        ;;
+    -h | --help)
+        help;
+        exit 0;
+        ;;
+    -nc | --no-color)
+        unset yellow red green underline bold;
+        ;;
+    -c | --case-sensitive)
+        CASE="";
+        ;;
+    -s | --slocate)
+        if [ ! -z "${LIMIT}" ]; then
+            Err "Can not give -f  and -s switch together";
+            help;
+            exit 1;
+        fi  
+        WORKDIR="$(pwd)/"
+        LIMIT="of at least 3 characters";
+        ;;
+    -f | --find)
+        if [ ! -z "${LIMIT}" ]; then
+            Err "Can not give -f  and -s switch together";
+            help;
+            exit 1;
+        fi  
+        LIMIT="of at least 3 characters";
+        FIND=1;
+        ;;
+#    -d | --disk)
+#        OUTPUT="locate ${INPUT_X}";
+#        LIMIT="of at least 3 characters";
+#        ;;
+    *)
+        Err "Unknown Option provided";
+        help;
+        exit 1;
+        ;;
+    esac
+done
+
+trap clean_tmpfile 0 1 2 5 15
+
+# Write once to temporary file, so that locate is run only once
+# We will only grep the results from this file later on
+if [ ! -z "${LIMIT}" ]; then
+    if [ -z "${FIND}" ]; then
+        locate -q -l 0 "${WORKDIR}" | sed "s:${WORKDIR}::" > ${TMPFILE} &
+    else
+        find ./ -mount -maxdepth ${MAXDEPTH} > ${TMPFILE} &
+    fi
+fi
+     
+clear;
+
+echo -e "\n\n\n$green^$normal---------------${green}Search Results$normal----------------------$green^\n\n\n$normal"
+
+#while test "1" -eq "1"
+while true
+do
+    
+    echo -ne "  $yellow *$normal   Enter search term ${LIMIT}( blanks not accepted ): $INPUT_X";
+    read -n 1 INPUT
+    
+    # Exit on pressing enter
+    if [ "$INPUT" = "" ]; then
+        break;
+    fi
+    
+    clear;
+
+    # An ASCII character within the range 32-126 will append, otherwise it will send backspace
+    if [ -z `echo -e "$INPUT" | grep -e "[[:print:]]"` ]; then
+        INPUT_X=`echo ${INPUT_X} | head -c -2`
+    else
+        INPUT_X="${INPUT_X}${INPUT}"
+    fi
+
+    
+    if [ ! -z "${INPUT_X}" ]; then    
+        if [ -z "${LIMIT}" ]; then
+            # Normal case, no problems here
+            ls --color -1 | grep ${CASE} ${INPUT_X};
+        
+        elif [ "$( echo ${INPUT_X} | wc -c )" -gt 3 ]; then
+            # Have to limit the output,- otherwise it takes 100% cpu
+            if [ -z "${FIND}" ]; then
+                grep ${CASE} ${INPUT_X} "${TMPFILE}" | tail -n 40 | sed "s:.*:${WORKDIR}&:";
+            else
+                grep ${CASE} ${INPUT_X} "${TMPFILE}" | tail -n 40;
+            fi
+        
+        fi
+    fi
+    
+        echo -e "\n\n\n$green^$normal-------------------${green}Search Results$normal----------------------$green^\n\n\n$normal"
+    
+done
+
+clean_tmpfile;
+
+
+### Old scripts ### {{{
+#    if [[ ! -z "${LIMIT}" && -z "${FIND}" ]]; then
+#        echo -e "\n\n\n$green^$normal-------------------$greenSearch Results$normal----------------------$green^\n\n\n$normalNote! You are using slocate database. You might get incorrect results if database is not up-to-date"
+#    else
+#    fi
+# }}}
